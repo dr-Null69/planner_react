@@ -1,10 +1,10 @@
 import {
-  createContext,
   useEffect,
   useReducer,
   useState,
   type ReactNode,
 } from 'react';
+import { TaskContext } from './taskContextDef';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import {
   initTaskState,
@@ -20,25 +20,6 @@ import type {
 
 const FILTER_STORAGE_KEY = 'study-planner-filter';
 const UNDO_DELETE_DELAY_MS = 5000;
-
-export interface TaskContextValue {
-  tasks: Task[];
-  filter: FilterType;
-  pendingDeleteId: number | null;
-  editingTask: Task | null;
-  toast: ToastState | null;
-  setFilter: (filter: FilterType) => void;
-  setEditingTask: (task: Task | null) => void;
-  addTask: (data: TaskFormData) => void;
-  updateTask: (id: number, data: TaskFormData) => void;
-  toggleTask: (id: number) => void;
-  requestDelete: (id: number) => void;
-  undoDelete: () => void;
-  resetTasks: () => void;
-  dismissToast: () => void;
-}
-
-export const TaskContext = createContext<TaskContextValue | null>(null);
 
 export const TaskProvider = ({ children }: { children: ReactNode }) => {
   const [state, dispatch] = useReducer(taskReducer, undefined, initTaskState);
@@ -57,11 +38,8 @@ export const TaskProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     try {
       localStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(state.tasks));
-    } catch {
-      showToast({
-        message: 'Не вдалося зберегти завдання у localStorage',
-        type: 'error',
-      });
+    } catch (error) {
+      console.error('Не вдалося зберегти завдання у localStorage:', error);
     }
   }, [state.tasks]);
 

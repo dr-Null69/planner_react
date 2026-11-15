@@ -1,28 +1,26 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useTaskContext } from '../hooks/useTaskContext';
-import type { Priority } from '../types/task';
+import type { Priority, Task } from '../types/task';
 
-export const TaskForm = () => {
-  const { addTask, updateTask, editingTask, setEditingTask } = useTaskContext();
+interface TaskFormInnerProps {
+  editingTask: Task | null;
+  onAdd: (data: Omit<Task, 'id' | 'completed'>) => void;
+  onUpdate: (id: number, data: Omit<Task, 'id' | 'completed'>) => void;
+  onCancelEdit: () => void;
+}
 
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [category, setCategory] = useState('React');
-  const [priority, setPriority] = useState<Priority>('medium');
-
-  useEffect(() => {
-    if (editingTask) {
-      setTitle(editingTask.title);
-      setDescription(editingTask.description);
-      setCategory(editingTask.category);
-      setPriority(editingTask.priority);
-    } else {
-      setTitle('');
-      setDescription('');
-      setCategory('React');
-      setPriority('medium');
-    }
-  }, [editingTask]);
+const TaskFormInner = ({
+  editingTask,
+  onAdd,
+  onUpdate,
+  onCancelEdit,
+}: TaskFormInnerProps) => {
+  const [title, setTitle] = useState(editingTask?.title ?? '');
+  const [description, setDescription] = useState(editingTask?.description ?? '');
+  const [category, setCategory] = useState(editingTask?.category ?? 'React');
+  const [priority, setPriority] = useState<Priority>(
+    editingTask?.priority ?? 'medium'
+  );
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,9 +34,9 @@ export const TaskForm = () => {
     };
 
     if (editingTask) {
-      updateTask(editingTask.id, payload);
+      onUpdate(editingTask.id, payload);
     } else {
-      addTask(payload);
+      onAdd(payload);
       setTitle('');
       setDescription('');
     }
@@ -88,7 +86,7 @@ export const TaskForm = () => {
         {editingTask && (
           <button
             type="button"
-            onClick={() => setEditingTask(null)}
+            onClick={onCancelEdit}
             className="cancel-edit-btn"
           >
             Скасувати
@@ -96,5 +94,19 @@ export const TaskForm = () => {
         )}
       </div>
     </form>
+  );
+};
+
+export const TaskForm = () => {
+  const { addTask, updateTask, editingTask, setEditingTask } = useTaskContext();
+
+  return (
+    <TaskFormInner
+      key={editingTask?.id ?? 'new'}
+      editingTask={editingTask}
+      onAdd={addTask}
+      onUpdate={updateTask}
+      onCancelEdit={() => setEditingTask(null)}
+    />
   );
 };
