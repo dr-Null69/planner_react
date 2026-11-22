@@ -2,7 +2,22 @@ import { useTaskContext } from '../hooks/useTaskContext';
 import { TaskItem } from './TaskItem';
 
 export const TaskList = () => {
-  const { tasks, filter } = useTaskContext();
+  const { tasks, filter, status, error, retry } = useTaskContext();
+
+  if (status === 'loading') {
+    return <div className="state-message">Завантаження завдань...</div>;
+  }
+
+  if (status === 'error') {
+    return (
+      <div className="state-error">
+        <p>Помилка завантаження: {error}</p>
+        <button type="button" onClick={retry} className="retry-btn">
+          Спробувати ще
+        </button>
+      </div>
+    );
+  }
 
   const filteredTasks = tasks.filter((task) => {
     if (filter === 'completed') return task.completed;
@@ -13,16 +28,7 @@ export const TaskList = () => {
   if (filteredTasks.length === 0) {
     return (
       <div className="empty-message">
-        {filter === 'all' ? (
-          <>
-            <p>Завдань поки немає.</p>
-            <p style={{ fontSize: '13px', marginTop: '4px', color: '#94a3b8' }}>
-              Додайте перше навчальне завдання вище.
-            </p>
-          </>
-        ) : (
-          <p>За цим фільтром завдань немає.</p>
-        )}
+        <p>Завдань не знайдено.</p>
       </div>
     );
   }
