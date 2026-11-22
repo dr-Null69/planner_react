@@ -3,7 +3,9 @@ import { Header } from './components/Header';
 import { TaskForm } from './components/TaskForm';
 import { TaskStats } from './components/TaskStats';
 import { TaskFilters } from './components/TaskFilters';
+import { TaskDetails } from './components/TaskDetails';
 import { TaskList } from './components/TaskList';
+import { Pagination } from './components/Pagination';
 import { Toast } from './components/Toast';
 
 export function App() {
@@ -14,7 +16,9 @@ export function App() {
         <TaskForm />
         <TaskStats />
         <TaskFilters />
+        <TaskDetails />
         <TaskList />
+        <Pagination />
       </div>
       <Toast />
     </TaskProvider>

@@ -2,7 +2,7 @@ import { useTaskContext } from '../hooks/useTaskContext';
 import type { FilterType } from '../types/task';
 
 export const TaskFilters = () => {
-  const { filter, setFilter, resetTasks } = useTaskContext();
+  const { filter, setFilter, retry } = useTaskContext();
 
   const getBtnClass = (btnFilter: FilterType) =>
     filter === btnFilter ? 'active' : '';
@@ -33,8 +33,8 @@ export const TaskFilters = () => {
         </button>
       </div>
 
-      <button type="button" onClick={resetTasks} className="reset-btn">
-        Скинути дані
+      <button type="button" onClick={retry} className="reset-btn">
+        Оновити
       </button>
     </div>
   );
