@@ -4,72 +4,134 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { TaskContext } from './taskContextDef';
+import { isAbortError } from '../api/httpClient';
 import { useLocalStorage } from '../hooks/useLocalStorage';
-import {
-  initTaskState,
-  taskReducer,
-  TASKS_STORAGE_KEY,
-} from '../reducers/taskReducer';
+import { taskRepository } from '../repositories/taskRepository';
 import type {
+  AsyncStatus,
   FilterType,
   Task,
   TaskFormData,
   ToastState,
 } from '../types/task';
+import { TaskContext } from './taskContextDef';
 
 const FILTER_STORAGE_KEY = 'study-planner-filter';
-const UNDO_DELETE_DELAY_MS = 5000;
+const PAGE_LIMIT = 10;
+
+interface ServerState {
+  tasks: Task[];
+  total: number;
+  status: AsyncStatus;
+  error: string | null;
+}
+
+type ServerAction =
+  | { type: 'fetchStart' }
+  | { type: 'fetchSuccess'; payload: { tasks: Task[]; total: number } }
+  | { type: 'fetchError'; payload: string }
+  | { type: 'prependTask'; payload: Task }
+  | { type: 'replaceTask'; payload: Task }
+  | { type: 'removeTask'; payload: number };
+
+const initialServerState: ServerState = {
+  tasks: [],
+  total: 0,
+  status: 'loading',
+  error: null,
+};
+
+function serverReducer(state: ServerState, action: ServerAction): ServerState {
+  switch (action.type) {
+    case 'fetchStart':
+      return { ...state, status: 'loading', error: null };
+    case 'fetchSuccess':
+      return {
+        tasks: action.payload.tasks,
+        total: action.payload.total,
+        status: 'success',
+        error: null,
+      };
+    case 'fetchError':
+      return { ...state, status: 'error', error: action.payload };
+    case 'prependTask':
+      return {
+        ...state,
+        tasks: [action.payload, ...state.tasks],
+        total: state.total + 1,
+      };
+    case 'replaceTask':
+      return {
+        ...state,
+        tasks: state.tasks.map((t) =>
+          t.id === action.payload.id ? action.payload : t
+        ),
+      };
+    case 'removeTask':
+      return {
+        ...state,
+        tasks: state.tasks.filter((t) => t.id !== action.payload),
+        total: Math.max(0, state.total - 1),
+      };
+    default:
+      return state;
+  }
+}
 
 export const TaskProvider = ({ children }: { children: ReactNode }) => {
-  const [state, dispatch] = useReducer(taskReducer, undefined, initTaskState);
+  const [serverState, dispatch] = useReducer(serverReducer, initialServerState);
+
+  // Client / UI state
+  const [page, setPage] = useState(1);
+  const [reloadKey, setReloadKey] = useState(0);
   const [filter, setFilter] = useLocalStorage<FilterType>(
     FILTER_STORAGE_KEY,
     'all'
   );
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
 
   const showToast = (next: Omit<ToastState, 'id'>) => {
     setToast({ ...next, id: Date.now() });
   };
 
-  // 1. Синхронізація tasks у localStorage
+  // Завантаження списку з пагінацією та скасуванням попереднього запиту
   useEffect(() => {
-    try {
-      localStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(state.tasks));
-    } catch (error) {
-      console.error('Не вдалося зберегти завдання у localStorage:', error);
-    }
-  }, [state.tasks]);
+    const controller = new AbortController();
+    const skip = (page - 1) * PAGE_LIMIT;
 
-  // 2. Синхронізація заголовка вкладки браузера
-  useEffect(() => {
-    const activeCount = state.tasks.filter((task) => !task.completed).length;
-    document.title = `Study Planner — ${activeCount} active tasks`;
-  }, [state.tasks]);
+    dispatch({ type: 'fetchStart' });
 
-  // 3. Таймер Undoable Delete (5 секунд)
-  useEffect(() => {
-    if (state.pendingDeleteId === null) return;
-
-    const idToDelete = state.pendingDeleteId;
-    const timer = window.setTimeout(() => {
-      dispatch({ type: 'confirmDelete', payload: { id: idToDelete } });
-      showToast({
-        message: 'Завдання остаточно видалено',
-        type: 'info',
+    taskRepository
+      .getAll(PAGE_LIMIT, skip, controller.signal)
+      .then((result) => {
+        dispatch({
+          type: 'fetchSuccess',
+          payload: { tasks: result.tasks, total: result.total },
+        });
+      })
+      .catch((err: unknown) => {
+        if (isAbortError(err)) return;
+        const message =
+          err instanceof Error ? err.message : 'Не вдалося завантажити завдання';
+        dispatch({ type: 'fetchError', payload: message });
       });
-    }, UNDO_DELETE_DELAY_MS);
 
     return () => {
-      window.clearTimeout(timer);
+      controller.abort();
     };
-  }, [state.pendingDeleteId]);
+  }, [page, reloadKey]);
 
-  // 4. Авто-закриття звичайних Toast (не undoable)
+  // Синхронізація заголовка вкладки браузера
   useEffect(() => {
-    if (!toast || toast.undoable) return;
+    const activeCount = serverState.tasks.filter((t) => !t.completed).length;
+    document.title = `Study Planner — ${activeCount} active tasks`;
+  }, [serverState.tasks]);
+
+  // Авто-закриття Toast
+  useEffect(() => {
+    if (!toast) return;
 
     const timer = window.setTimeout(() => {
       setToast(null);
@@ -80,64 +142,70 @@ export const TaskProvider = ({ children }: { children: ReactNode }) => {
     };
   }, [toast]);
 
-  const addTask = (data: TaskFormData) => {
-    dispatch({ type: 'add', payload: data });
-    showToast({
-      message: 'Завдання успішно створено',
-      type: 'success',
-    });
+  const retry = () => {
+    setReloadKey((prev) => prev + 1);
   };
 
-  const updateTask = (id: number, data: TaskFormData) => {
-    dispatch({ type: 'update', payload: { id, data } });
-    setEditingTask(null);
-    showToast({
-      message: 'Завдання оновлено',
-      type: 'success',
-    });
+  const addTask = async (data: TaskFormData) => {
+    try {
+      const created = await taskRepository.create(data);
+      dispatch({ type: 'prependTask', payload: created });
+      showToast({ message: 'Завдання успішно створено', type: 'success' });
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : 'Не вдалося створити завдання';
+      showToast({ message, type: 'error' });
+    }
   };
 
-  const toggleTask = (id: number) => {
-    dispatch({ type: 'toggle', payload: { id } });
-  };
-
-  const requestDelete = (id: number) => {
-    if (state.pendingDeleteId !== null && state.pendingDeleteId !== id) {
-      showToast({
-        message: 'Спочатку завершіть або скасуйте поточне видалення',
-        type: 'warning',
+  const updateTask = async (id: number, data: TaskFormData) => {
+    const existing = serverState.tasks.find((t) => t.id === id);
+    try {
+      const updated = await taskRepository.update(id, {
+        ...data,
+        completed: existing?.completed,
       });
-      return;
-    }
-
-    if (editingTask?.id === id) {
+      dispatch({ type: 'replaceTask', payload: updated });
       setEditingTask(null);
+      showToast({ message: 'Завдання оновлено', type: 'success' });
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : 'Не вдалося оновити завдання';
+      showToast({ message, type: 'error' });
     }
-
-    dispatch({ type: 'requestDelete', payload: { id } });
-    showToast({
-      message: 'Завдання буде видалено через 5 сек.',
-      type: 'warning',
-      undoable: true,
-      durationMs: UNDO_DELETE_DELAY_MS,
-    });
   };
 
-  const undoDelete = () => {
-    dispatch({ type: 'undoDelete' });
-    showToast({
-      message: 'Видалення скасовано',
-      type: 'info',
-    });
+  const toggleTask = async (id: number) => {
+    const existing = serverState.tasks.find((t) => t.id === id);
+    if (!existing) return;
+
+    try {
+      const updated = await taskRepository.update(id, {
+        completed: !existing.completed,
+        description: existing.description,
+        priority: existing.priority,
+        category: existing.category,
+      });
+      dispatch({ type: 'replaceTask', payload: updated });
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : 'Не вдалося змінити статус';
+      showToast({ message, type: 'error' });
+    }
   };
 
-  const resetTasks = () => {
-    dispatch({ type: 'reset' });
-    setEditingTask(null);
-    showToast({
-      message: 'Дані скинуто до початкових',
-      type: 'info',
-    });
+  const deleteTask = async (id: number) => {
+    try {
+      await taskRepository.delete(id);
+      dispatch({ type: 'removeTask', payload: id });
+      if (editingTask?.id === id) setEditingTask(null);
+      if (selectedTaskId === id) setSelectedTaskId(null);
+      showToast({ message: 'Завдання видалено', type: 'info' });
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : 'Не вдалося видалити завдання';
+      showToast({ message, type: 'error' });
+    }
   };
 
   const dismissToast = () => {
@@ -147,19 +215,25 @@ export const TaskProvider = ({ children }: { children: ReactNode }) => {
   return (
     <TaskContext.Provider
       value={{
-        tasks: state.tasks,
+        tasks: serverState.tasks,
+        status: serverState.status,
+        error: serverState.error,
+        page,
+        limit: PAGE_LIMIT,
+        total: serverState.total,
         filter,
-        pendingDeleteId: state.pendingDeleteId,
         editingTask,
+        selectedTaskId,
         toast,
+        setPage,
+        retry,
         setFilter,
         setEditingTask,
+        setSelectedTaskId,
         addTask,
         updateTask,
         toggleTask,
-        requestDelete,
-        undoDelete,
-        resetTasks,
+        deleteTask,
         dismissToast,
       }}
     >

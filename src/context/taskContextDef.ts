@@ -1,5 +1,6 @@
 import { createContext } from 'react';
 import type {
+  AsyncStatus,
   FilterType,
   Task,
   TaskFormData,
@@ -8,18 +9,24 @@ import type {
 
 export interface TaskContextValue {
   tasks: Task[];
+  status: AsyncStatus;
+  error: string | null;
+  page: number;
+  limit: number;
+  total: number;
   filter: FilterType;
-  pendingDeleteId: number | null;
   editingTask: Task | null;
+  selectedTaskId: number | null;
   toast: ToastState | null;
+  setPage: (page: number) => void;
+  retry: () => void;
   setFilter: (filter: FilterType) => void;
   setEditingTask: (task: Task | null) => void;
-  addTask: (data: TaskFormData) => void;
-  updateTask: (id: number, data: TaskFormData) => void;
-  toggleTask: (id: number) => void;
-  requestDelete: (id: number) => void;
-  undoDelete: () => void;
-  resetTasks: () => void;
+  setSelectedTaskId: (id: number | null) => void;
+  addTask: (data: TaskFormData) => Promise<void>;
+  updateTask: (id: number, data: TaskFormData) => Promise<void>;
+  toggleTask: (id: number) => Promise<void>;
+  deleteTask: (id: number) => Promise<void>;
   dismissToast: () => void;
 }
 
