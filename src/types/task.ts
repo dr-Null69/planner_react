@@ -8,6 +8,9 @@ export interface Task {
   completed: boolean;
   priority: Priority;
   category: string;
+
+  createdBy: string;
+  createdAt: string;
 }
 
 export type TaskFormData = Omit<Task, 'id' | 'completed'>;
@@ -58,3 +61,27 @@ export interface PaginatedTasks {
 }
 
 export type AsyncStatus = 'loading' | 'success' | 'error';
+
+
+export interface AuthUser {
+  id: number;
+  username: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+}
+export interface LoginCredentials {
+  username: string;
+  password: string;
+}
+export interface LoginResponse {
+  id: number;
+  username: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  accessToken: string;
+  refreshToken: string;
+}
+
+  
