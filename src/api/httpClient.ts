@@ -1,5 +1,11 @@
 const BASE_URL = import.meta.env.VITE_API_URL;
 
+let authToken: string | null = null;
+
+export function setAuthToken(token: string | null): void {
+  authToken = token;
+}
+
 export function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === 'AbortError';
 }
@@ -12,6 +18,9 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
   const headers = new Headers(options.headers);
   if (options.body && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
+  }
+  if (authToken && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${authToken}`);
   }
 
   const response = await fetch(`${BASE_URL}${endpoint}`, {

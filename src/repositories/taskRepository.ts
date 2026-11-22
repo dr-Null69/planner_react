@@ -7,10 +7,12 @@ import type {
   TodosResponse,
 } from '../types/task';
 
-function toTask(
-  todo: ApiTodo,
-  clientMeta?: Partial<TaskFormData>
-): Task {
+interface ClientTaskMeta extends Partial<TaskFormData> {
+  createdBy?: string;
+  createdAt?: string;
+}
+
+function toTask(todo: ApiTodo, clientMeta?: ClientTaskMeta): Task {
   return {
     id: todo.id,
     title: todo.todo,
@@ -18,6 +20,9 @@ function toTask(
     completed: todo.completed,
     priority: clientMeta?.priority ?? 'medium',
     category: clientMeta?.category ?? 'General',
+    // Client-owned metadata (DummyJSON не повертає ці поля з сервера)
+    createdBy: clientMeta?.createdBy ?? `User #${todo.userId}`,
+    createdAt: clientMeta?.createdAt ?? new Date().toISOString(),
   };
 }
 
@@ -45,19 +50,23 @@ export const taskRepository = {
     return toTask(todo);
   },
 
-  async create(data: TaskFormData): Promise<Task> {
+  async create(data: TaskFormData, createdBy = 'guest'): Promise<Task> {
     const created = await httpClient.post<ApiTodo>('/todos/add', {
       todo: data.title,
       completed: false,
       userId: 1,
     });
 
-    return toTask(created, data);
+    return toTask(created, {
+      ...data,
+      createdBy,
+      createdAt: new Date().toISOString(),
+    });
   },
 
   async update(
     id: number,
-    payload: { title?: string; completed?: boolean } & Partial<TaskFormData>
+    payload: { title?: string; completed?: boolean } & ClientTaskMeta
   ): Promise<Task> {
     const body: Record<string, unknown> = {};
     if (payload.title !== undefined) body.todo = payload.title;
